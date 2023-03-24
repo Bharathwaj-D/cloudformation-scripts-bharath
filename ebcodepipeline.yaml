@@ -1,0 +1,216 @@
+Parameters:
+ 
+ ElasticBeanStalkApplicationName:
+   Description: Enter the Application name
+   Type: String
+ ElasticBeanStalkApplicationEnvironmentName:
+   Description: Enter the environment name
+   Type: String 
+ RepositoryName: 
+   Description: Type repo name
+   Type: String
+Conditions: 
+ Repo: !Equals [!Ref RepositoryName, ebs]
+
+  
+Resources:
+ 
+ Build:
+     Type: AWS::CodeBuild::Project 
+     Properties:
+       Name: build 
+       Description: A description about my project
+       ServiceRole: !GetAtt BuildRole.Arn
+       Artifacts:
+         Type: S3
+         Location: newebcloudformation
+         
+       Environment:
+         Type: LINUX_CONTAINER
+         ComputeType: BUILD_GENERAL1_SMALL
+         Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+         PrivilegedMode: True
+       Source:
+         !If
+          - Repo
+          - 
+             Type: CODECOMMIT
+             Location: https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/ebs
+  
+          - 
+             Type: CODECOMMIT
+             Location: https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/ecs        
+                   
+ Pipeline: 
+  Type: AWS::CodePipeline::Pipeline  
+  Properties:
+   Name: ebecs
+   RoleArn: !GetAtt PipelineRole.Arn
+   RestartExecutionOnUpdate: true
+   ArtifactStore:
+    Type: S3
+    Location: newebcloudformation 
+   Stages:
+        - Name: Source 
+          Actions: 
+              -
+               Name: SourceAction
+               ActionTypeId: 
+                Category: Source 
+                Owner: AWS 
+                Version:  1 
+                Provider: CodeCommit 
+               OutputArtifacts: 
+                - 
+                 Name: ebOutput 
+               Configuration: 
+                RepositoryName: !Ref RepositoryName
+                BranchName: master
+        - Name: Build
+          Actions:
+              
+                    - 
+                      Name: Build
+                      InputArtifacts:
+                         - Name: ebOutput
+                      ActionTypeId:
+                         Category: Build
+                         Owner: AWS
+                         Provider: CodeBuild 
+                         Version: 1
+                      Configuration:
+                         ProjectName: build 
+                      OutputArtifacts:
+                       - Name: output 
+
+                    
+        - Name: Deploy
+          Actions: 
+             - !If 
+                 - Repo 
+                 - Name: ebDeploy 
+                   InputArtifacts: 
+                        - Name: output 
+                   ActionTypeId: 
+                     Category: Deploy 
+                     Owner: AWS 
+                     Version: 1 
+                     Provider: ElasticBeanstalk
+                   Configuration: 
+                     ApplicationName: !Ref ElasticBeanStalkApplicationName
+                     EnvironmentName: !Ref ElasticBeanStalkApplicationEnvironmentName
+                   
+                 -  Name: ecsDeploy  
+                    InputArtifacts: 
+                         - Name: output 
+                    ActionTypeId: 
+                        Category: Deploy 
+                        Owner: AWS 
+                        Version: 1 
+                        Provider: ECS
+                    Configuration: 
+                       ClusterName: bharath
+                       ServiceName: bharathnew
+                       FileName: imagedefinitions.json
+                       DeploymentTimeout: '15'
+                  
+ AmazonCloudWatchEventRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        -
+          PolicyName: cwe-pipeline-execution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Effect: Allow
+                Action: codepipeline:StartPipelineExecution
+                Resource: !Join [ '', [ 'arn:aws:codepipeline:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':', !Ref Pipeline ] ] 
+
+ AmazonCloudWatchEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.codecommit
+        detail-type:
+          - 'CodeCommit Repository State Change'
+        resources:
+          - arn:aws:codecommit:ap-southeast-1:928920371678:ebs
+        detail:
+          event:
+            - referenceCreated
+            - referenceUpdated
+          referenceType:
+            - branch
+          referenceName:
+            - main
+            - master 
+      Targets:
+        -
+          Arn: 
+            !Join [ '', [ 'arn:aws:codepipeline:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':', !Ref Pipeline ] ]
+          RoleArn: !GetAtt AmazonCloudWatchEventRole.Arn
+          Id: codepipeline-Pipeline 
+ PipelineRole:
+     Type: AWS::IAM::Role
+     Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+         - 
+          Effect: Allow
+          Principal:
+           Service:
+            - codepipeline.amazonaws.com
+          Action:
+            - sts:AssumeRole
+            
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AWSCodeCommitFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk
+        - arn:aws:iam::aws:policy/AWSCodeDeployFullAccess
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+        
+ BuildRole:
+     Type: AWS::IAM::Role 
+     Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+         - 
+          Effect: Allow
+          Principal:
+           Service:
+            - codebuild.amazonaws.com
+          Action:
+            - sts:AssumeRole
+            
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AWSCodeCommitFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk
+        - arn:aws:iam::aws:policy/AWSCodeDeployFullAccess
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+        - arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilderECRContainerBuilds
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser

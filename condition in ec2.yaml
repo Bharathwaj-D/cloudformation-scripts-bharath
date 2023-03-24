@@ -1,0 +1,56 @@
+Parameters:
+ EC2:
+  Description: Choose public or PrivateEC2
+  Type: String 
+  AllowedValues:
+   - Public
+   - Private 
+ AMI: 
+  Description: Choose Linux or Ubuntu
+  Type: String 
+ 
+ KeyName:
+  Description: EC2 Key Pair for SSH Access
+  Type: AWS::EC2::KeyPair::KeyName
+ 
+Conditions:
+ LaunchPublic: !Equals [!Ref EC2, Public]
+ LaunchPrivate: !Equals [!Ref EC2, Private]
+ AMIID: !Equals [!Ref AMI, Linux]
+ Public: !Or
+   - !Condition LaunchPublic
+   - !Condition AMIID
+ Private: !Or
+   - !Condition LaunchPrivate
+   - !Condition AMIID
+
+Resources: 
+      EC2Instance:
+        Type: AWS::EC2::Instance
+        Condition: Public
+        Properties:
+          ImageId: !If [AMIID, ami-01a4f99c4ac11b03c, ami-06984ea821ac0a879]
+          InstanceType: t2.micro
+          SubnetId: !ImportValue newbharath-publicsubnet 
+          SecurityGroupIds: 
+             - !ImportValue SSH
+             - !ImportValue bharathwajsecurity 
+          KeyName: !Ref KeyName
+          Tags:
+             - Key: Name
+               Value: EC2condition
+
+      PrivateEC2:
+        Type: AWS::EC2::Instance
+        Condition: Private 
+        Properties:
+          ImageId: !If [AMIID, ami-01a4f99c4ac11b03c, ami-06984ea821ac0a879]
+          InstanceType: t2.micro
+          SubnetId: !ImportValue newbharath-privatesubnet
+          SecurityGroupIds: 
+             - !ImportValue SSH
+             - !ImportValue bharathwajsecurity 
+          KeyName: !Ref KeyName
+          Tags:
+             - Key: Name
+               Value: conditionEC2

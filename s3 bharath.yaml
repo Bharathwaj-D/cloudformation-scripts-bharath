@@ -1,0 +1,101 @@
+Parameters:
+ Versioning:
+  Description: Enable Bucket  Version
+  Type: String
+  AllowedValues:
+   - true
+   - false
+ BucketEncryptions:
+  Description: Enable Bucket Version
+  Type: String
+  AllowedValues:
+   - true
+   - false 
+ 
+Conditions:
+ Version: !Equals [!Ref  Versioning, true]
+ Encryption: !Equals [!Ref BucketEncryptions, true]
+ 
+
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: "bharathwaj-cloudformation"
+      VersioningConfiguration: 
+                     !If 
+                       - Version
+                       - Status: Enabled
+                       - !Ref AWS::NoValue 
+      BucketEncryption:
+                    !If
+                     - Encryption
+                     - 
+                       ServerSideEncryptionConfiguration:
+                       - ServerSideEncryptionByDefault:
+                          SSEAlgorithm: 'aws:kms'
+                          KMSMasterKeyID: KMS-KEY-ARN
+                     - !Ref AWS::NoValue
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Description: "origin access control(OAC) for allowing cloudfront to access S3 bucket"
+        Name: static-hosting-OAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - S3Bucket
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Sub "arn:aws:acm:${AWS::Region}:{AWS::AccountID}:certificate/cfff7dd9-571b-4a6a-a8b6-48fe38744d4f"
+            Id: static-hosting
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+        Enabled: "true"
+        DefaultRootObject: index.html
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        HttpVersion: http2
+        Aliases:
+          - bharath.pestinew.cf
+        ViewerCertificate:
+          AcmCertificateArn: "arn:aws:acm:us-east-1:928920371678:certificate/cfff7dd9-571b-4a6a-a8b6-48fe38744d4f"
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          Compress: true
+          TargetOriginId: static-hosting
+          ForwardedValues:
+            QueryString: "false"
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https      
+
+
+
+  
+ 
+  
+
+  

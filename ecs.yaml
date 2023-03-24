@@ -1,0 +1,107 @@
+Parameters:
+ EcsSecurityGroup:
+    Type: 'List<AWS::EC2::SecurityGroup::Id>'
+    Description: Select security group
+ VpcId:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: Select a VP
+ SubnetId:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+    Description: Choose subnet 
+Resources:
+  CloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: bharathwaj
+      RetentionInDays: 365
+  EcrRepo:
+    Type: 'AWS::ECR::Repository'
+    Properties:
+      RepositoryName: bharath-cf
+      Tags:
+        - Key: stack-id
+          Value: !Ref 'AWS::StackName'
+  taskdef:
+    Type: 'AWS::ECS::TaskDefinition'
+    DependsOn:
+      - AppTargetGroup
+      - ECSALBListenerRuleForTG
+    Properties:
+      RequiresCompatibilities:
+        - FARGATE
+      Family: bharathwaj
+      ContainerDefinitions:
+        - Name: bharathwaj
+          Image: 928920371678.dkr.ecr.ap-southeast-1.amazonaws.com/bharath:latest
+          Essential: 'true'
+          PortMappings:
+            - ContainerPort: 80 
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: true 
+              awslogs-group: /ecs/bharathwaj
+              awslogs-region: ap-southeast-1
+              awslogs-stream-prefix: ecs
+              
+      NetworkMode: awsvpc
+      Memory: '3072'
+      Cpu: '1024'
+      TaskRoleArn: arn:aws:iam::928920371678:role/newbharathecs
+      ExecutionRoleArn: arn:aws:iam::928920371678:role/newbharathecs
+  ECSCluster:
+   Type: 'AWS::ECS::Cluster'
+   Properties:
+    ClusterName: bharathwaj 
+    
+  service:
+    Type: 'AWS::ECS::Service'
+    DependsOn: 
+         - taskdef
+         - ECSCluster
+    Properties:
+      ServiceName: bharathwaj
+      Cluster: bharathwaj 
+      LaunchType: FARGATE
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      HealthCheckGracePeriodSeconds: 5
+      LoadBalancers:
+        - ContainerName: bharathwaj
+          ContainerPort: 80
+          TargetGroupArn: !Ref AppTargetGroup
+      TaskDefinition: !Ref taskdef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: !Ref EcsSecurityGroup
+          Subnets: !Ref SubnetId
+          AssignPublicIp: ENABLED
+      PropagateTags: SERVICE
+  AppTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Name: ecscloudformation
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VpcId
+      TargetType: ip
+  ECSALBListenerRuleForTG:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref AppTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values: 
+            - / 
+      ListenerArn: arn:aws:elasticloadbalancing:ap-southeast-1:928920371678:listener/app/ecsload/1765c9c4c6325c0f/356e7f59209e4805
+      Priority: 1

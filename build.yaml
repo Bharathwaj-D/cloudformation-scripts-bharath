@@ -1,0 +1,26 @@
+Resources:
+    Build:
+     Type: AWS::CodeBuild::Project
+     Properties:
+       Name: myProjectName
+       Description: A description about my project
+       ServiceRole: arn:aws:iam::928920371678:role/service-role/codebuild-bharathebs-service-role
+       Artifacts:
+         Type: S3
+         Location: newebcloudformation
+         
+       Environment:
+         Type: LINUX_CONTAINER
+         ComputeType: BUILD_GENERAL1_SMALL
+         Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+       Source:
+         Location: https://github.com/Bharathwaj-D/bharathwaj.git
+         Type: GITHUB
+         GitCloneDepth: 1
+       TimeoutInMinutes: 10
+       Tags:
+         - Key: Key1
+           Value: Value1
+         - Key: Key2
+           Value: Value2
+      

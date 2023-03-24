@@ -1,0 +1,164 @@
+Metadata:
+ AWS::Cloudformation::Interface:
+  parameterGroups:
+    - 
+     Label:
+      Default: "VPC"
+     Parameters:
+       - VPC
+    -
+     Label: 
+      Default: "subnet"
+     Parameters: 
+      - PublicSubnet
+      - PrivateSubnet
+Parameters:
+ NumberofAZs:
+  Type: Number 
+  AllowedValues:
+  - 0
+  - 1
+  - 2
+  Default: 1
+ VPC:
+  Default: 10.0.0.0/16
+  Description: Enter VPC CidrBlock
+  Type: String
+ PublicSubnet:
+  Default: 10.0.1.0/24
+  Description: Enter Public Subnet CidrBlock
+  Type: String
+ PrivateSubnet:
+  Default: 10.0.2.0/24
+  Description: Enter Private Subnet CidrBlock
+  Type: String
+Resources:
+     
+      PubPrivateVPC:
+        Type: AWS::EC2::VPC
+        Properties:
+          CidrBlock: !Ref VPC
+          
+
+          
+      PublicSubnet1:
+        Type: AWS::EC2::Subnet
+        Properties:
+          VpcId: !Ref PubPrivateVPC
+          AvailabilityZone: !Select [ 0, !GetAZs ]
+          CidrBlock: !Ref PublicSubnet
+          MapPublicIpOnLaunch: true
+          Tags:
+            - key: Name
+              value: !Sub ${AWS::StackName}-Publicsubnet1   
+      
+     
+      PrivateSubnet1:
+        Type: AWS::EC2::Subnet
+        Properties:
+          VpcId: !Ref PubPrivateVPC
+          AvailabilityZone: !Select [ 1, !GetAZs ]
+          CidrBlock: !Ref PrivateSubnet
+          MapPublicIpOnLaunch: false
+          Tags:
+            - key: Name
+              value: !Sub ${AWS::StackName}-Privatesubnet1
+     
+      InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+         Tags:
+            - key: Name
+              value: !Sub ${AWS::StackName}-internetgateway 
+      GatewayToInternet:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+          VpcId: !Ref PubPrivateVPC
+          InternetGatewayId: !Ref InternetGateway
+      
+      
+      PublicRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties:
+          VpcId: !Ref PubPrivateVPC
+          Tags:
+            - key: Name
+              value: !Sub ${AWS::StackName}-publicroute
+      
+      PublicRoute:
+        Type: AWS::EC2::Route
+        DependsOn: GatewayToInternet
+        Properties:
+          RouteTableId: !Ref PublicRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+          GatewayId: !Ref InternetGateway
+     
+      PublicSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+          SubnetId: !Ref PublicSubnet1
+          RouteTableId: !Ref PublicRouteTable
+     
+      
+     
+      
+      NatGateway:
+        Type: AWS::EC2::NatGateway
+        DependsOn: NatPublicIP
+        Properties: 
+          SubnetId: !Ref PublicSubnet1
+          AllocationId: !GetAtt NatPublicIP.AllocationId
+          Tags:
+            - key: Name
+              value: !Sub ${AWS::StackName}-natgateway
+
+      
+      NatPublicIP:
+        Type: AWS::EC2::EIP
+        DependsOn: PubPrivateVPC
+        Properties:
+          Domain: vpc
+     
+      
+      PrivateRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties:
+          VpcId: !Ref PubPrivateVPC
+          Tags:
+            - key: Name
+              value: !Sub ${AWS::StackName}-privateroute
+      
+      PrivateRoute:
+        Type: AWS::EC2::Route
+        Properties:
+          NatGatewayId: !Ref NatGateway
+          RouteTableId: !Ref PrivateRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+     
+      PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+          SubnetId: !Ref PrivateSubnet1
+          RouteTableId: !Ref PrivateRouteTable
+
+Outputs:
+ VPC:
+  Description: Application VPC
+  Value: !Ref PubPrivateVPC
+  Export:
+   Name: !Sub ${AWS::StackName}-vpc
+
+ PublicSubnet1:
+  Description: PublicSubnet1
+  Value: !Ref PublicSubnet1
+  Export: 
+   Name: !Sub ${AWS::StackName}-publicsubnet
+
+ PrivateSubnet1:
+  Description: PrivateSubnet1
+  Value: !Ref PrivateSubnet1
+  Export:
+   Name: !Sub ${AWS::StackName}-privatesubnet
+
+ 
+     

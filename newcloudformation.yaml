@@ -1,0 +1,113 @@
+Metadata:
+  AWS::Cloudformation::Interface:
+    ParameterGroups:
+     -
+      Label:
+       default: "CIDR"
+      parameters:
+       - CIDR
+      
+     -
+      Label:
+       default: "subnet"
+      parameters: 
+       - publicsubnet1
+       - privatesubnet1
+
+parameters:
+  NumberofAvailabilityZone:
+   Type: Number
+   AllowedValues:
+   - 0
+   - 1
+   - 2
+   Default: 1
+   Description: Choose availability Zones
+  CIDR:
+   Default: 10.0.0.0/16
+   Description: Enter the VPC CIDR
+   Type: String
+
+  publicsubnet1:
+   Default: 10.0.1.0/24
+   Description: Enter public subnet 
+   Type: String
+
+  privatesubnet1:
+   Default: 10.0.2.0/24
+   Description: Enter Privarte Subnet
+   Type: String
+
+Resources:
+ VPC:
+  Type: AWS::EC2::VPC
+  Properties:
+    CidrBlock: !Ref CIDR
+    EnableDnsSupport: 'true'
+    EnableDnsHostnames: 'true'
+    Tags:
+     - Key: name
+       Value: !Sub ${AWS::StackName}-VPC
+
+ myInternetGateway:
+  Type: AWS::EC2::InternetGateway
+  Properties:
+    Tags:
+     - Key: name
+       Value: !Sub ${AWS::StackName}-internetgateway
+
+ GatewayToInternet:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+          VpcId: !Ref VPC
+          InternetGatewayId: !Ref myInternetGateway      
+
+ PublicSubnet1:
+   Type: AWS::EC2::Subnet
+   Properties:
+    VpcId: !Ref VPC
+    CidrBlock: !Ref publicsubnet1
+    AvailabilityZone: !Select [ 0, !GetAvailabilityZone ]
+    MapPublicIpOnLaunch: true
+    Tags:
+     - Key: name
+       Value: !Sub ${AWS::StackName}-publicsubnet
+ PrivateSubnet1:
+   Type: AWS::EC2::Subnet
+   Properties:
+    VpcId: !Ref VPC
+    CidrBlock: !Ref privatesubnet1
+
+ NATGateway:
+   Type: AWS::EC2::NatGateway
+   DependsOn: NATGatewayEIP
+   Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref publicsubnet1
+      Tags:
+      - Key: name
+        Value: bharathnat
+ NATGatewayEIP:
+   Type: AWS::EC2::EIP
+   DependsOn: VPC
+   Properties:
+      Domain: vpc
+ RouteNATGateway:
+   DependsOn: NATGateway
+   Type: AWS::EC2::Route
+   Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+ PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+          SubnetId: !Ref privatesubnet1
+          RouteTableId: !Ref PrivateRouteTable
+
+ PrivateRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties:
+          VpcId: !Ref VPC 
+       

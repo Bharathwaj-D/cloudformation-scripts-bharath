@@ -1,0 +1,405 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+
+  ApplicationName:
+    Description: Name of your application
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
+
+  StackType:
+    Description: node, rails, python, python3 or spring
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedValues:
+      - node
+      - rails
+      - spring
+      - python
+      - python3
+      - php
+    ConstraintDescription: Specify node, rails, python, python3, php or spring
+
+  EnvironmentName:
+    Description: Environment name
+    Type: String
+
+  AppS3Bucket:
+    Description: S3 Bucket containing your application package.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+
+  AppS3Key:
+    Description: S3 Bucket key for your application package
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+
+  EC2KeyPairName:
+    Description: EC2 key pair name for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+
+  InstanceType:
+    Description: The instance type for the environment
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    Default: t2.micro
+
+  AutoScalingMinInstanceCount:
+    Description: Minimum number of EC2 instances for Auto Scaling
+    Type: Number
+    MinValue: 1
+    MaxValue: 20
+    Default: 2
+    ConstraintDescription: Specify a number between 1 - 20
+
+  AutoScalingMaxInstanceCount:
+    Description: Maximum number of EC2 instances for Auto Scaling
+    Type: Number
+    MinValue: 1
+    MaxValue: 20
+    Default: 6
+    ConstraintDescription: Specify a number between 1 - 20
+  
+  VpcId:
+    Description: Select Vpc
+    Type: AWS::EC2::VPC::Id
+  
+  Subnet1:
+    Description: Select instance Subnet
+    Type: AWS::EC2::Subnet::Id
+
+  Subnet2:
+   Description: Select instance subnet 
+   Type: AWS::EC2::Subnet::Id
+
+  Subnet3: 
+    Description: Select Instance Subnet
+    Type: AWS::EC2::Subnet::Id
+
+  LoadBalancerSubnet1:
+    Description: Select ELB Subnet 
+    Type: AWS::EC2::Subnet::Id
+
+  LoadBalancerSubnet2:
+    Description: Select ELB Subnet
+    Type: AWS::EC2::Subnet::Id
+
+  LoadBalancerSubnet3:
+    Description: Select ELB Subnet 
+    Type: AWS::EC2::Subnet::Id
+
+  DatabasePassword:
+    Description: Type DB DatabasePassword
+    Type: String
+    NoEcho: true
+
+  DatabaseName:
+    Description: Type DB Name
+    Type: String
+  
+  DatabaseUserName:
+    Description: Type DB User Name
+    Type: String
+ 
+  DatabaseURL:
+    Description: Give DB Endpoint
+    Type: String
+
+  
+
+  SSLCertificateArn:
+    Description: The SSL/TLS certificate ARN
+    Type: String
+
+  HostedZoneId:
+    Description: Route 53 Hosted VpcId
+    Type: String 
+
+  DomainName:
+    Description: DNS Name
+    Type: String 
+  
+Mappings:
+  # Maps stack type parameter to solution stack name string
+  StackMap:
+    node:
+      stackName: 64bit Amazon Linux 2018.03 v4.5.3 running Node.js
+    rails:
+      stackName: 64bit Amazon Linux 2018.03 v2.8.3 running Ruby 2.4 (Puma)
+    spring:
+      stackName: 64bit Amazon Linux 2018.03 v3.0.3 running Tomcat 8 Java 8
+    python:
+      stackName: 64bit Amazon Linux 2018.03 v2.7.3 running Python 2.7
+    python3:
+      stackName: 64bit Amazon Linux 2018.03 v2.7.3 running Python 3.6
+    php:
+      stackName: 64bit Amazon Linux 2 v3.5.4 running PHP 8.1
+
+Resources:
+
+  SecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+          VpcId: !Ref VpcId   
+          GroupDescription: Enable HTTP from 0.0.0.0/0
+          SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: '80'
+                  ToPort: '80'
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: '22'
+                  ToPort: '22'
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: '3306'
+                  ToPort: '3306'
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: '443'
+                  ToPort: '443'
+                  CidrIp: 0.0.0.0/0
+                
+
+  WebsiteDNSName:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Comment: CNAME redirect custom name to CloudFront distribution
+      Name: !Ref DomainName
+      Type: CNAME
+      TTL: '900'
+      ResourceRecords:
+      - awseb-AWSEB-3T1OFA781EHS-1912525423.ap-southeast-1.elb.amazonaws.com
+
+  ElasticBeanstalkServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+         - 
+          Effect: Allow
+          Principal:
+           Service:
+            - elasticbeanstalk.amazonaws.com
+          Action:
+            - sts:AssumeRole
+            
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkService
+
+  Application:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref ApplicationName
+
+  ApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref Application
+      SourceBundle:
+        S3Bucket: !Ref AppS3Bucket
+        S3Key: !Ref AppS3Key
+
+  
+
+  Environment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      EnvironmentName: !Sub "${ApplicationName}-${EnvironmentName}"
+      ApplicationName: !Ref Application
+      TemplateName: !Ref ConfigurationTemplate
+      VersionLabel: !Ref ApplicationVersion
+    DependsOn:
+      - ConfigurationTemplate
+      - ApplicationVersion
+  ConfigurationTemplate:
+    Type: AWS::ElasticBeanstalk::ConfigurationTemplate
+    Properties:
+      ApplicationName: !Ref Application
+      SolutionStackName: !FindInMap [ StackMap, !Ref StackType, stackName ]
+      OptionSettings:
+
+      - Namespace: aws:elasticbeanstalk:environment
+        OptionName: EnvironmentType
+        Value: LoadBalanced
+
+      - Namespace: aws:elasticbeanstalk:environment:proxy
+        OptionName: ProxyServer
+        Value: apache
+
+    
+
+      - Namespace: aws:elasticbeanstalk:environment
+        OptionName: LoadBalancerType
+        Value: application
+
+      - Namespace: aws:elasticbeanstalk:environment
+        OptionName: ServiceRole
+        Value: !Ref ElasticBeanstalkServiceRole
+
+       
+      - Namespace: aws:autoscaling:asg
+        OptionName: MinSize
+        Value: !Ref AutoScalingMinInstanceCount
+
+      - Namespace: aws:autoscaling:asg
+        OptionName: MaxSize
+        Value: !Ref AutoScalingMaxInstanceCount
+
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: SecurityGroups
+        Value: !Ref SecurityGroup
+          
+
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: InstanceType
+        Value: !Ref InstanceType
+
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: IamInstanceProfile
+        Value: !Ref AppInstanceProfile
+
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: EC2KeyName
+        Value: !Ref EC2KeyPairName
+
+      - Namespace: aws:autoscaling:updatepolicy:rollingupdate
+        OptionName: RollingUpdateEnabled
+        Value: true
+
+      - Namespace: aws:autoscaling:updatepolicy:rollingupdate
+        OptionName: RollingUpdateType
+        Value: Health
+
+      - Namespace: aws:autoscaling:trigger
+        OptionName: MeasureName
+        Value: CPUUtilization
+
+      - Namespace: aws:autoscaling:trigger
+        OptionName: Unit
+        Value: Percent
+
+      - Namespace: aws:autoscaling:trigger
+        OptionName: UpperThreshold
+        Value: 80
+
+      - Namespace: aws:autoscaling:trigger
+        OptionName: LowerThreshold
+        Value: 40
+
+      
+      - Namespace: aws:ec2:vpc
+        OptionName: VPCId
+        Value: !Ref VpcId
+
+      - Namespace: aws:ec2:vpc
+        OptionName: Subnets
+        Value: !Join
+          - ','
+          - - !Ref Subnet1
+            - !Ref Subnet2
+            - !Ref Subnet3
+
+      - Namespace: aws:ec2:vpc
+        OptionName: ELBSubnets
+        Value: !Join
+          - ','
+          - - !Ref LoadBalancerSubnet1 
+            - !Ref LoadBalancerSubnet2
+            - !Ref LoadBalancerSubnet3
+      
+      - Namespace: aws:elbv2:listener:default
+        OptionName: ListenerEnabled
+        Value: true
+
+      - Namespace: aws:elbv2:loadbalancer
+        OptionName: SecurityGroups
+        Value: !Ref SecurityGroup
+
+      - Namespace: aws:elasticbeanstalk:application:environment
+        OptionName: DB_PASSWORD
+        Value: !Ref DatabasePassword
+      
+      - Namespace: aws:elbv2:listenerrule:default
+        OptionName: PathPatterns
+        Value: "/*"
+
+      - Namespace: !Sub
+          - "aws:elbv2:listener:${ListenPort}"
+          - ListenPort: 443
+        OptionName: Protocol
+        Value: HTTPS 
+      
+      - Namespace: !Sub
+        - "aws:elbv2:listener:${ListenPort}"
+        - ListenPort: 443
+        OptionName: Rules
+        Value: default
+     
+      - Namespace: !Sub
+        - "aws:elbv2:listener:${ListenPort}"
+        - ListenPort: 443
+        OptionName: SSLCertificateArns
+        Value: !Ref SSLCertificateArn
+
+      - Namespace: aws:elasticbeanstalk:application:environment
+        OptionName: DB_USER
+        Value: !Ref DatabaseUserName
+
+      - Namespace: aws:elasticbeanstalk:application:environment
+        OptionName: DB_NAME
+        Value: !Ref DatabaseName
+
+      - Namespace: aws:elasticbeanstalk:application:environment
+        OptionName: RDS_HOST
+        Value: !Ref DatabaseURL
+
+     
+
+     
+
+  # IAM resources
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  AppPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: App
+      Roles:
+      - !Ref AppRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Action: "*"
+            Resource: "*"
+
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - !Ref AppRole

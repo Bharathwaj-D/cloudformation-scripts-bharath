@@ -1,0 +1,69 @@
+Parameters:
+ KeyName:
+  Description: EC2 Key Pair for SSH Access
+  Type: AWS::EC2::KeyPair::KeyName
+
+
+Resources:
+      bharathwajSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+          VpcId: !ImportValue newbharath-vpc 
+          GroupDescription: Enable HTTP from 0.0.0.0/0
+          SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: '80'
+                  ToPort: '80'
+                  CidrIp: 0.0.0.0/0
+      
+      ssh1securitygroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+          GroupDescription: SSH Enable
+          SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: '22'
+                  ToPort: '22'
+                  CidrIp: 0.0.0.0/0
+          VpcId: !ImportValue newbharath-vpc
+
+      EC2Instance:
+        Type: AWS::EC2::Instance
+        Properties:
+          ImageId: !ImportValue newbharath-EC2AMI
+          InstanceType: t2.micro
+          SubnetId: !ImportValue newbharath-publicsubnet 
+          SecurityGroupIds: 
+                 - !Ref bharathwajSecurityGroup
+                 - !Ref ssh1securitygroup           
+          KeyName: !Ref KeyName
+          Tags:
+             - Key: Name
+               Value: EC2
+
+      PrivateEC2:
+       Type: AWS::EC2::Instance
+       Properties:
+          ImageId: !ImportValue newbharath-EC2AMI
+          InstanceType: t2.micro
+          SubnetId: !ImportValue newbharath-privatesubnet
+          SecurityGroupIds:
+                 - !Ref bharathwajSecurityGroup
+                 - !Ref ssh1securitygroup
+          KeyName: !Ref KeyName
+          Tags:
+             - Key: Name
+               Value: PrivateEC2
+
+Outputs:
+ bharathwajSecurityGroup:
+  Description: Http Security
+  Value: !Ref bharathwajSecurityGroup
+  Export:
+   Name: bharathwajsecurity
+
+ ssh1securitygroup:
+  Description: SSH Security
+  Value: !Ref ssh1securitygroup
+  Export:
+   Name: SSH  
